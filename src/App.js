@@ -1,6 +1,11 @@
 import React, { Component } from 'react';
 import logo from './logo.svg';
+
+
 import './App.css';
+
+import { BrowserRouter as Router, Route, Link } from 'react-router-dom'
+import ReactTable from 'react-table'
 
 import * as JsDiff from 'diff'
  
@@ -24,33 +29,48 @@ const readFile = async(file) => {
 };
 class Api {
   constructor() {
-    localStorage.clear();
-
-    localStorage.setItem('documents', JSON.stringify([]));
+    this.id = 0;
   }
 
   getAllDocuments = async () => {
-    const documents = JSON.parse(localStorage.getItem('documents'))
+    return Object.keys(localStorage)
+      .map((key) => JSON.parse(localStorage.getItem(key)));
+  }
 
-    console.log(documents)
-
-    return documents;
+  getDocument = async (id) => {
+    return JSON.parse(localStorage.getItem(`doc-${id}`))
   }
 
   postDocument = async(file) => {
     const text = await readFile(file);
 
+    const id = ++this.id;
+
     const document = {
+      id,
       name: file.name,
       size: file.size,
       lastModified: file.lastModified,
+      status: 'draft',
       text
     };
 
-    const documents = JSON.parse(localStorage.getItem('documents')) || [];
-    documents.push(document);
+    localStorage.setItem(`doc-${id}`, JSON.stringify(document));
+  }
 
-    localStorage.setItem('documents', JSON.stringify(documents));
+  patchDocument = async(newDoc) => {
+    const oldDoc = await this.getDocument(newDoc.id)
+    const updated = { ...oldDoc, ...newDoc};
+
+    console.log(oldDoc, newDoc, updated)
+
+    localStorage.setItem(`doc-${updated.id}`, JSON.stringify(updated));
+  }
+
+  actions = {
+    submitForReview: (id) => {
+      this.patchDocument({ id, status: 'waiting-review'})
+    }
   }
 }
 
@@ -58,48 +78,86 @@ const apiService = new Api();
 
 class DocumentTable extends Component {
   static defaultProps = {
-    documents: []
+    documents: [],
+    handleAction: (actionName) => {}
   }
 
   render() {
     const { documents } = this.props
 
-    const documentRows = documents.map((doc) => {
-      return (
-        <tr key={doc.name}>
-          <td>{doc.name}</td>
-          <td>{doc.lastModified}</td>
-          <td>{doc.size}</td>
-          <td>{doc.status}</td>
-        </tr>
-      );
-    })
+    const data = documents;
+
+    const columns = [
+      {
+        Header: 'ID',
+        accessor: 'id'
+      }, {
+        Header: 'Filename',
+        accessor: 'name',
+        Cell: (props) => <Link to={`/${props.original.id}/edit`}>{props.value}</Link>
+      }, {
+        Header: 'Last Modified',
+        accessor: 'lastModified'
+      }, {
+        Header: 'Size',
+        accessor: 'size'
+      }, {
+        Header: 'Status',
+        accessor: 'status'
+      }, {
+        Header: 'Action',
+        Cell: (props) => (
+          <button 
+            name="submitForReview" 
+            onClick={(e) => {
+              this.props.handleAction(e.target.name, props.original)}}
+          >
+            Submit for Review
+          </button>
+        )
+      }
+    ];
 
     return (
-      <table>
-        <thead>
-          <tr>
-            <td>Filename</td>
-            <td>Last Modified</td>
-            <td>Size</td>
-            <td>Actions</td>
-          </tr>
-        </thead>
-        <tbody>
-          {documentRows}
-        </tbody>
-      </table>
+      <>
+        <ReactTable 
+          data={data}
+          columns={columns}
+          defaultPageSize={5}
+        />
+      </>
     );
   }
 }
 
-class Document extends Component {
+class DocumentEditor extends Component {
   static defaultProps = {
-    diff: []
+    originText: '',
+  }
+
+  constructor(props) {
+    super(props);
+
+    console.log('de')
+
+    this.state = {
+      text: '',
+      diff: []
+    }
+  }
+
+  componentDidMount = () => {
+    this.setState({ text: this.state.originText })
+
+    const diff = JsDiff.diffChars(this.props.originText, this.state.text);
+
+    console.log(diff);
+
+    this.setState({ diff })
   }
 
   render() {
-    const { diff } = this.props
+    const { diff } = this.state
 
     const content = diff.map((part, index) => {
       const color = part.added ? 'green' : part.removed ? 'red' : 'grey'
@@ -111,6 +169,7 @@ class Document extends Component {
 
     return (
       <div>
+        <h1>Document Editor</h1>
         {content}
       </div>
     )
@@ -155,11 +214,22 @@ class SupervisorDashboard extends Component {
     await this.getDocuments();
   }
 
+  handleAction = async(actionName, document) => {
+    switch (actionName) {
+      case 'submitForReview':
+        await apiService.actions.submitForReview(document.id)
+      break;
+      default:
+        console.error("Unrecognized Action");
+    }
+  }
+
   render() {
     const { documents } = this.state
 
     return (
       <div>
+        <h1>Supervisor Dashboard</h1>
         <form onSubmit={this.handleSubmit}>
           <label>New Document</label>
           <input
@@ -169,17 +239,43 @@ class SupervisorDashboard extends Component {
           />
           <button type="submit">Save</button>
         </form>
-        <DocumentTable documents={documents} />
+        <DocumentTable 
+          documents={documents} 
+          handleAction={this.handleAction}
+        />
       </div>
     )
   }
 }
 
 class ReviewerDashboard extends Component {
+  constructor(props) {
+    super(props);
+
+    this.state = {
+      documents: []
+    };
+  }
+
+  componentDidMount = async () => {
+    await this.getDocuments();
+  }
+
+  getDocuments = async() => {
+    try {
+      const documents = await apiService.getAllDocuments();
+
+      this.setState({ documents })
+    } catch (e) {}
+  }
+
   render() {
+    const { documents } = this.state
+
     return (
       <div>
-        <DocumentTable />
+        <h1>Reviewer Dashboard</h1>
+        <DocumentTable documents={documents}/>
       </div>
     )
   }
@@ -189,10 +285,13 @@ class ReviewerDashboard extends Component {
 class App extends Component {
   render() {
     return (
-      <div className="App">
-        <SupervisorDashboard />
-        <ReviewerDashboard />
-      </div>
+      <Router>
+        <div className="App">
+          <SupervisorDashboard />
+          <ReviewerDashboard />
+          <Route link="/:id/edit" component={DocumentEditor} />
+        </div>
+      </Router>
     );
   }
 }
