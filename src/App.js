@@ -1,13 +1,28 @@
 import React, { Component } from 'react';
 import logo from './logo.svg';
 
-
 import './App.css';
 
-import { BrowserRouter as Router, Route, Link } from 'react-router-dom'
+import { BrowserRouter as Router, Route, Link, Switch, Redirect } from 'react-router-dom'
 import ReactTable from 'react-table'
 
 import * as JsDiff from 'diff'
+
+import Draft, { Editor, EditorState } from 'draft-js'
+
+/** Components */
+import ActionCell from './components/ActionCell'
+
+/**
+ * Document review process
+ * 
+ * 1. Created/Uploaded -> 
+ * 2. Edit -> 
+ * 3a. Submit for Review <-> 
+ * 3b. Edit (View with Patches) -> 
+ * 4. Finalize
+ */
+
  
 const readFile = async(file) => {  
   return new Promise((resolve, reject) => {
@@ -69,7 +84,7 @@ class Api {
 
   actions = {
     submitForReview: (id) => {
-      this.patchDocument({ id, status: 'waiting-review'})
+      this.patchDocument({ id, status: 'waitingReview'})
     }
   }
 }
@@ -79,7 +94,37 @@ const apiService = new Api();
 class DocumentTable extends Component {
   static defaultProps = {
     documents: [],
-    handleAction: (actionName) => {}
+    onAction: (actionName, document) => {}
+  }
+
+  renderAction = (props) => {
+    const doc = props.original
+
+    /*
+    switch (doc.status) {
+      case 'draft':
+        return <ActionCell
+          display="Submit For Review"
+          onClick={(e) => this.props.onAction("submitReview", doc)}
+        />
+      case 'waitingReview':
+        return <ActionCell
+          display="Review"
+          onClick={(e) => this.props.onAction("review", doc)}
+        />
+      case 'reviewed':
+      default:
+        return <div>No Action for State</div>
+    }
+    */
+
+    return (
+      <div>
+        <button onClick={(e) => this.props.onAction("edit", doc)}>Edit Original</button>
+        <button>Review</button>
+        <button>Patches</button>
+      </div>
+    )
   }
 
   render() {
@@ -106,15 +151,7 @@ class DocumentTable extends Component {
         accessor: 'status'
       }, {
         Header: 'Action',
-        Cell: (props) => (
-          <button 
-            name="submitForReview" 
-            onClick={(e) => {
-              this.props.handleAction(e.target.name, props.original)}}
-          >
-            Submit for Review
-          </button>
-        )
+        Cell: this.renderAction
       }
     ];
 
@@ -131,46 +168,88 @@ class DocumentTable extends Component {
 }
 
 class DocumentEditor extends Component {
-  static defaultProps = {
-    originText: '',
-  }
+  content;
 
   constructor(props) {
     super(props);
 
-    console.log('de')
-
     this.state = {
-      text: '',
-      diff: []
+      doc: undefined,
+      diff: [],
+      editorState: EditorState.createEmpty()
     }
   }
 
-  componentDidMount = () => {
-    this.setState({ text: this.state.originText })
-
-    const diff = JsDiff.diffChars(this.props.originText, this.state.text);
-
-    console.log(diff);
-
-    this.setState({ diff })
+  componentDidMount = async() => {
+    const { id } = this.props.match.params
+    const doc = await apiService.getDocument(id);
+    
+    this.setState({ 
+      doc,
+      editorState: EditorState.createWithContent(Draft.ContentState.createFromText(doc.text))
+    });
   }
 
-  render() {
-    const { diff } = this.state
+  handleChange = (editorState) => {
+    /*
+    const diff = JsDiff.diffWordsWithSpace(this.state.doc.text, editorState.getCurrentContent().getPlainText());
 
-    const content = diff.map((part, index) => {
+    const contentBlocks = diff.map((part, index) => {
       const color = part.added ? 'green' : part.removed ? 'red' : 'grey'
 
       const style = { color }
 
-      return <span key={index} style={style}>{part.value}</span>
+      return new Draft.ContentBlock({
+        key: index,
+        text: part.value
+      });
     })
 
+    const contentState = Draft.ContentState.createFromBlockArray(contentBlocks);
+
+    console.log(editorState.getCurrentContent().getBlockMap())
+    console.log(contentState.getBlockMap())
+    */
+
+    this.setState({ editorState })
+  }
+
+  render() {
+    const { doc } = this.state
+
+    const editorText = this.state.editorState.getCurrentContent().getPlainText();
+
+    if (doc && doc.text.hashCode !== editorText) {
+      const diff = JsDiff.diffWordsWithSpace(doc.text, editorText)
+
+      this.content = diff.map((part, index) => {
+        const color = part.added ? 'green' : part.removed ? 'red' : 'grey'
+
+        const style = { color }
+
+        return (<span key={index} style={style}>{part.value}</span>)
+      })
+    }
+
     return (
-      <div>
+      <div className="container">
         <h1>Document Editor</h1>
-        {content}
+        { doc &&
+          <div>
+            <p>Filename: {doc.name}</p>
+            <div className="row">
+              <div className="col">
+              <Editor 
+                editorState={this.state.editorState} 
+                onChange={this.handleChange}
+              />
+              </div>
+              <div className="col">
+                {this.content}
+              </div>
+            </div>
+          </div>
+        }
       </div>
     )
   }
@@ -216,7 +295,8 @@ class SupervisorDashboard extends Component {
 
   handleAction = async(actionName, document) => {
     switch (actionName) {
-      case 'submitForReview':
+      case 'submitReview':
+        console.info(`Submitting document ${document.id} for review`)
         await apiService.actions.submitForReview(document.id)
       break;
       default:
@@ -228,7 +308,7 @@ class SupervisorDashboard extends Component {
     const { documents } = this.state
 
     return (
-      <div>
+      <div className="container-fluid">
         <h1>Supervisor Dashboard</h1>
         <form onSubmit={this.handleSubmit}>
           <label>New Document</label>
@@ -241,7 +321,7 @@ class SupervisorDashboard extends Component {
         </form>
         <DocumentTable 
           documents={documents} 
-          handleAction={this.handleAction}
+          onAction={this.handleAction}
         />
       </div>
     )
@@ -269,27 +349,41 @@ class ReviewerDashboard extends Component {
     } catch (e) {}
   }
 
+  handleAction = async(action, document) => {
+
+  }
+
   render() {
     const { documents } = this.state
 
     return (
       <div>
         <h1>Reviewer Dashboard</h1>
-        <DocumentTable documents={documents}/>
+        <DocumentTable 
+          documents={documents}
+          onAction={this.handleAction}
+        />
       </div>
     )
   }
 }
 
-
 class App extends Component {
   render() {
     return (
       <Router>
-        <div className="App">
-          <SupervisorDashboard />
-          <ReviewerDashboard />
-          <Route link="/:id/edit" component={DocumentEditor} />
+        <div>
+          <header>
+            <nav className="navbar navbar-dark bg-dark navbar-expand-lg">
+              <span className="navbar-brand h1">Diff It Up</span>
+            </nav>
+          </header>
+          <Switch>
+            <Route path="/" exact render={() => <Redirect to="/supervisor" />} />
+            <Route path="/supervisor" component={SupervisorDashboard} />
+            <Route path="/reviewer" component={ReviewerDashboard} />
+            <Route path="/:id/edit" component={DocumentEditor} />
+          </Switch>
         </div>
       </Router>
     );
