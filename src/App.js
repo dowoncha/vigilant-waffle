@@ -6,12 +6,16 @@ import './App.css';
 import { BrowserRouter as Router, Route, Link, Switch, Redirect } from 'react-router-dom'
 import ReactTable from 'react-table'
 
-import * as JsDiff from 'diff'
+import Menu, {SubMenu, MenuItem } from 'rc-menu'
+import 'rc-menu/assets/index.css';
 
-import Draft, { Editor, EditorState } from 'draft-js'
+/** Pages */
+import DocReviewPage from './pages/DocReviewPage'
 
 /** Components */
 import ActionCell from './components/ActionCell'
+import DocumentEditor from './components/DocumentEditor'
+import ErrorBoundary from './components/ErrorBoundary'
 
 /**
  * Document review process
@@ -97,34 +101,32 @@ class DocumentTable extends Component {
     onAction: (actionName, document) => {}
   }
 
-  renderAction = (props) => {
-    const doc = props.original
+  state = {
+    selected: undefined,
+    mouse: {
+      x: 0,
+      y: 0
+    },
+  }
 
-    /*
-    switch (doc.status) {
-      case 'draft':
-        return <ActionCell
-          display="Submit For Review"
-          onClick={(e) => this.props.onAction("submitReview", doc)}
-        />
-      case 'waitingReview':
-        return <ActionCell
-          display="Review"
-          onClick={(e) => this.props.onAction("review", doc)}
-        />
-      case 'reviewed':
-      default:
-        return <div>No Action for State</div>
+  wrapperRef = undefined;
+
+  componentDidMount() {
+    document.addEventListener('mousedown', this.handleClickOutsideMenu);
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener('mousedown', this.handleClickOutsideMenu)
+  }
+
+  setWrapperRef(node) {
+    this.wrapperRef = node;
+  }
+
+  handleClickOutsideMenu = (event) => {
+    if (this.wrapperRef && !this.wrapperRef.contains(event.target)) {
+      alert('You clicked outside of me')
     }
-    */
-
-    return (
-      <div>
-        <button onClick={(e) => this.props.onAction("edit", doc)}>Edit Original</button>
-        <button>Review</button>
-        <button>Patches</button>
-      </div>
-    )
   }
 
   render() {
@@ -139,7 +141,7 @@ class DocumentTable extends Component {
       }, {
         Header: 'Filename',
         accessor: 'name',
-        Cell: (props) => <Link to={`/${props.original.id}/edit`}>{props.value}</Link>
+        Cell: (props) => <Link to={`/documents/${props.original.id}`}>{props.value}</Link>
       }, {
         Header: 'Last Modified',
         accessor: 'lastModified'
@@ -161,99 +163,58 @@ class DocumentTable extends Component {
           data={data}
           columns={columns}
           defaultPageSize={5}
-        />
+          getTrProps={(state, rowInfo) => {
+            /**
+             * Check if row is selected
+             */
+            if (rowInfo && rowInfo.row) {
+              return {
+                onClick: (e) => {
+                  this.setState({ selected: rowInfo.index })
+                },
+                onContextMenu: (e) => {
+                  e.preventDefault();
+
+                  console.log(e.screenX, e.screenY)
+                        
+                  this.setState({ 
+                    selected: rowInfo.index,
+                    mouse: {
+                      x: e.screenX,
+                      y: e.screenY - 100,
+                    }
+                  })
+                },
+                style: {
+                  background: rowInfo.index === this.state.selected ? '#00afec' : 'white',
+                  color: rowInfo.index === this.state.selected ? 'white' : 'black'
+                }
+              }
+            } else {
+              return {}
+            }
+          }}
+        /> 
+        <Menu
+          style={{
+            position: 'fixed',
+            zIndex: 100,
+            top: this.state.mouse.y,
+            left: this.state.mouse.x,
+            backgroundColor: 'white'
+          }}
+          >
+
+          <MenuItem>Action 1</MenuItem>
+          <MenuItem>Action 2</MenuItem>
+          <MenuItem>Action 3</MenuItem>
+        </Menu>
       </>
     );
   }
 }
 
-class DocumentEditor extends Component {
-  content;
 
-  constructor(props) {
-    super(props);
-
-    this.state = {
-      doc: undefined,
-      diff: [],
-      editorState: EditorState.createEmpty()
-    }
-  }
-
-  componentDidMount = async() => {
-    const { id } = this.props.match.params
-    const doc = await apiService.getDocument(id);
-    
-    this.setState({ 
-      doc,
-      editorState: EditorState.createWithContent(Draft.ContentState.createFromText(doc.text))
-    });
-  }
-
-  handleChange = (editorState) => {
-    /*
-    const diff = JsDiff.diffWordsWithSpace(this.state.doc.text, editorState.getCurrentContent().getPlainText());
-
-    const contentBlocks = diff.map((part, index) => {
-      const color = part.added ? 'green' : part.removed ? 'red' : 'grey'
-
-      const style = { color }
-
-      return new Draft.ContentBlock({
-        key: index,
-        text: part.value
-      });
-    })
-
-    const contentState = Draft.ContentState.createFromBlockArray(contentBlocks);
-
-    console.log(editorState.getCurrentContent().getBlockMap())
-    console.log(contentState.getBlockMap())
-    */
-
-    this.setState({ editorState })
-  }
-
-  render() {
-    const { doc } = this.state
-
-    const editorText = this.state.editorState.getCurrentContent().getPlainText();
-
-    if (doc && doc.text.hashCode !== editorText) {
-      const diff = JsDiff.diffWordsWithSpace(doc.text, editorText)
-
-      this.content = diff.map((part, index) => {
-        const color = part.added ? 'green' : part.removed ? 'red' : 'grey'
-
-        const style = { color }
-
-        return (<span key={index} style={style}>{part.value}</span>)
-      })
-    }
-
-    return (
-      <div className="container">
-        <h1>Document Editor</h1>
-        { doc &&
-          <div>
-            <p>Filename: {doc.name}</p>
-            <div className="row">
-              <div className="col">
-              <Editor 
-                editorState={this.state.editorState} 
-                onChange={this.handleChange}
-              />
-              </div>
-              <div className="col">
-                {this.content}
-              </div>
-            </div>
-          </div>
-        }
-      </div>
-    )
-  }
-}
 
 class SupervisorDashboard extends Component {
   constructor(props) {
@@ -368,24 +329,30 @@ class ReviewerDashboard extends Component {
   }
 }
 
+// /welcome -> [Reviewer, Employee, Supervisor, Admin]
+
 class App extends Component {
   render() {
     return (
-      <Router>
-        <div>
-          <header>
-            <nav className="navbar navbar-dark bg-dark navbar-expand-lg">
-              <span className="navbar-brand h1">Diff It Up</span>
-            </nav>
-          </header>
-          <Switch>
-            <Route path="/" exact render={() => <Redirect to="/supervisor" />} />
-            <Route path="/supervisor" component={SupervisorDashboard} />
-            <Route path="/reviewer" component={ReviewerDashboard} />
-            <Route path="/:id/edit" component={DocumentEditor} />
-          </Switch>
-        </div>
-      </Router>
+      <>
+        <ErrorBoundary>
+          <Router>
+            <div>
+              <header>
+                <nav className="navbar navbar-dark bg-dark navbar-expand-lg">
+                  <span className="navbar-brand h1">Diff It Up</span>
+                </nav>
+              </header>
+              <Switch>
+                <Route path="/" exact render={() => <Redirect to="/supervisor" />} />
+                <Route path="/supervisor" component={SupervisorDashboard} />
+                <Route path="/reviewer" component={ReviewerDashboard} />
+                <Route path="/documents/:id" component={DocReviewPage} />
+              </Switch>
+            </div>
+          </Router>
+        </ErrorBoundary>
+      </>
     );
   }
 }
