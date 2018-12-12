@@ -6,9 +6,6 @@ import './App.css';
 import { BrowserRouter as Router, Route, Link, Switch, Redirect } from 'react-router-dom'
 import ReactTable from 'react-table'
 
-import Menu, {SubMenu, MenuItem } from 'rc-menu'
-import 'rc-menu/assets/index.css';
-
 /** Pages */
 import DocReviewPage from './pages/DocReviewPage'
 
@@ -195,6 +192,7 @@ class DocumentTable extends Component {
             }
           }}
         /> 
+        {/*
         <Menu
           style={{
             position: 'fixed',
@@ -209,6 +207,7 @@ class DocumentTable extends Component {
           <MenuItem>Action 2</MenuItem>
           <MenuItem>Action 3</MenuItem>
         </Menu>
+        */}
       </>
     );
   }
