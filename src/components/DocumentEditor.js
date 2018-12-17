@@ -13,47 +13,43 @@
 
 import React, { Component } from 'react'
 
-import Draft, { Editor, EditorState } from 'draft-js'
-
-import 'draft-js/dist/Draft.css'
-
-import * as JsDiff from 'diff'
+import { Editor } from 'slate-react'
+import { Value } from 'slate'
+ 
+// import * as JsDiff from 'diff'
+const initialValue = Value.fromJSON({
+  document: {
+    nodes: [
+      {
+        object: 'block',
+        type: 'paragraph',
+        node: [
+          {
+            object: 'text',
+            leaves: [
+              {
+                text: 'A line of text in a paragraph.'
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+})
 
 class DocumentEditor extends Component {
   state = {
-    editorState: EditorState.createEmpty()
+    value: initialValue
   }
 
-  handleChange = (editorState) => {
-    /*
-    const diff = JsDiff.diffWordsWithSpace(this.state.doc.text, editorState.getCurrentContent().getPlainText());
-
-    const contentBlocks = diff.map((part, index) => {
-      const color = part.added ? 'green' : part.removed ? 'red' : 'grey'
-
-      const style = { color }
-
-      return new Draft.ContentBlock({
-        key: index,
-        text: part.value
-      });
-    })
-
-    const contentState = Draft.ContentState.createFromBlockArray(contentBlocks);
-
-    console.log(editorState.getCurrentContent().getBlockMap())
-    console.log(contentState.getBlockMap())
-    */
-
-    this.setState({ editorState })
+  handleChange = ({ value }) => {
+    this.setState({ value })
   }
 
   render() {
     // console.log(this.state.editorState)
     // console.log(this.state.editorState.getCurrentContent().getEntityMap())
-    const blockMap = this.state.editorState.getCurrentContent().getBlockMap();
-
-    console.log(this.state.editorState.getCurrentContent().getFirstBlock())
 
     /*
     blockMap.forEach((block) => {
@@ -81,16 +77,22 @@ class DocumentEditor extends Component {
 
     return (
       <div 
-        className="container-fluid"
-        style={{
-          backgroundColor: '#eee',
-          height: '100vh'
-        }}>
-        <div className={styles.editorRoot}>
-          <Editor 
-            editorState={this.state.editorState} 
+        className='uk-card uk-card-large uk-card-default'
+      >
+        <div className="uk-card-header">
+          <nav className="uk-navbar-container" data-uk-navbar>
+            <ul className="uk-iconnav">
+            </ul>
+          </nav>
+        </div>
+        <div className="uk-card-body">
+          <Editor
+            value={this.state.value}
             onChange={this.handleChange}
           />
+        </div>
+
+        <div className="uk-card-footer">
         </div>
       </div>
     )
@@ -98,7 +100,13 @@ class DocumentEditor extends Component {
 }
 
 const styles = {
-
+  editorRoot: {
+  },
+  editorContainer: {
+    backgroundColor: 'white',
+    height: '60vh',
+    border: '1px solid #ddd'
+  }
 };
 
 export default DocumentEditor

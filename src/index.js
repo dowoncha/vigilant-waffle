@@ -1,14 +1,26 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 
-import 'react-table/react-table.css'
-
+/**
+ * Stylesheets
+ */
+import 'uikit/dist/css/uikit.min.css'
 import './index.css';
+
+/**
+ * 3rd party libraries
+ */
+import UIkit from 'uikit'
+import Icons from 'uikit/dist/js/uikit-icons'
+
 import App from './App';
 import * as serviceWorker from './serviceWorker';
 
-// localStorage.set('user', JSON.stringify({ role: 'SUPERVISOR' }))
+UIkit.use(Icons);
 
+/**
+ * Hash function is necessary to run text comparison before diffing
+ */
 String.prototype.hashCode = function() {
     var hash = 0;
     if (this.length == 0) {
